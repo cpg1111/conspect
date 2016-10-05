@@ -1,4 +1,7 @@
 use std::fs::File;
+use std::sync::{Arc, Mutex};
+use std::sunc::mpsc;
+use std::threading;
 
 pub mod cgroup_reader {
     trait CGroup_Reader {
@@ -50,7 +53,7 @@ pub mod cgroup_reader {
     }
 
     impl CGroup_Reader for CPU_Reader {
-        fn read(stat: String) -> String {
+        fn read(&self, stat: String) -> String {
             return read_cgroup("cpu", self.name, stat);
         }
     }
@@ -61,7 +64,7 @@ pub mod cgroup_reader {
     }
 
     impl CGroup_Reader for Mem_Reader {
-        fn read(stat: String) -> String {
+        fn read(&self, stat: String) -> String {
             return read_cgroup("memory", self.name, stat);
         }
     }
@@ -72,7 +75,7 @@ pub mod cgroup_reader {
     }
 
     impl CGroup_Reader for BLKIO_Reader {
-        fn read(stat: String) -> String {
+        fn read(&self, stat: String) -> String {
             return read_cgroup("blkio", self.name, stat);
         }
     }
@@ -83,7 +86,7 @@ pub mod cgroup_reader {
     }
 
     impl CGroup_Reader for Device_Reader {
-        fn read(stat: String) -> String {
+        fn read(&self, stat: String) -> String {
             return read_cgroup("devices", self.name, stat);
         }
     }
@@ -94,13 +97,29 @@ pub mod cgroup_reader {
     }
 
     impl CGroup_Reader for Net_Reader {
-        fn read(stat: String) -> String {
+        fn read(&self, stat: String) -> String {
             return read_cgroup("net_cls", self.name, stat);
         }
     }
 
     pub struct Reader {
-        cpu_stat: CPU_Reader,
+        cpu: CPU_Reader,
+        mem: Mem_Reader,
+        blkio: BLKIO_Reader,
+        devices: Device_Reader,
+        net: Net_Reader,
+    }
+
+    pub type CGroup_Stat = (String, String);
+
+    impl Reader {
+        fn read(&self) -> Vec<CGroup_Stat> {
+            let stats = Vec<CGroup_Stat>::new();
+            let ctx = self;
+            threading::spawn(|| {
+                let shares = ctx.cpu.read("cpu.shares");
+            })
+        }
     }
 
     pub fn new(pid: u32) -> Reader {

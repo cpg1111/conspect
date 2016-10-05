@@ -1,7 +1,10 @@
 use std::fs;
 use std::fs::File;
+use process::Process;
 
 pub mod ns_reader {
+    pub type NS_Group = (Vec<String>, Vec<&Process>);
+
     trait NS_Reader {
         fn read(&self) -> i32;
     }
