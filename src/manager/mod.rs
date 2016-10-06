@@ -1,21 +1,24 @@
 use std::fs;
 use std::fs::DirEntry;
 use std::path::Path;
+use std::thread;
+use libc::uid_t;
+use libc::getuid;
 use container;
 use container::Container;
-use ns_reader;
-use ns_reader::{NS_Group, NS_Reader};
-use process::Process;
+use container::ns_reader;
+use container::ns_reader::NS_Group;
+use container::process::Process;
 
 pub struct Manager {
-    user: String,
+    user: uid_t,
     containers: Vec<Container>,
-    ext_ns_reader: ns_reader::new(),
+    ext_ns_reader: ns_reader::Reader,
 }
 
 impl Manager {
     fn walk_proc(&self, cb: Fn(&DirEntry)) {
-        proc_dir = Path::new("/proc/");
+        let proc_dir = Path::new("/proc/");
         if proc_dir.is_dir() {
             for entry in try!(fs::read_dir(proc_dir)) {
                 let entry = try!(entry);
@@ -24,7 +27,7 @@ impl Manager {
         }
     }
 
-    fn match_ns(&self, process: &Process, reader: NS_Reader, groups: Vec<NS_Group>) -> Vec<NS_Group> {
+    fn match_ns(&self, process: &Process, reader: ns_reader::Reader, groups: Vec<NS_Group>) -> Vec<NS_Group> {
         let new_group = vec![
             reader.cpu.read(),
             reader.ipc.read(),
@@ -38,7 +41,7 @@ impl Manager {
             return groups;
         }
         for (group, idx) in groups {
-            (namespaces, procs) = group;
+            let (namespaces, procs) = group;
             let mut is_match = true;
             for (ns, i) in namespaces {
                 if ns != new_group[i] {
@@ -55,7 +58,7 @@ impl Manager {
     }
 
     fn get_process_groups(&self) -> Vec<NS_Group> {
-        let mut procs = Vec<NS_Group>::new();
+        let mut procs = Vec::<NS_Group>::new();
         self.walk_proc(|entry|{
             let path = entry.strip_prefix("/proc/");
             let path_str = path.to_str();
@@ -66,12 +69,26 @@ impl Manager {
         procs;
     }
 
-    fn get_containers(&self) -> Vec<Container> {
-        let containers = Vec<Container>::new()
+    fn get_containers(&self) {
         let groups = self.get_process_groups();
         for group in groups {
-            containers.push(container::new(group));
+            self.containers.push(container::new(group));
         }
-        containers
+    }
+
+    fn update(&self) {
+        for container in self.containers {
+            thread::spawn(|| {
+                container.update()
+            });
+        }
+    }
+}
+
+pub fn new() -> Manager {
+    Manager{
+        user: getuid(),
+        containers: Vec::<Container>::new(),
+        ext_ns_reader: ns_reader::new(),
     }
 }
