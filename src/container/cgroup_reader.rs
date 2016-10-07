@@ -33,18 +33,18 @@ trait CGroup_Reader {
     fn read(&self, stat: String) -> String;
 }
 
-fn which_cgroup(pid: u32) -> (Fn(String) -> String) {
+fn which_cgroup(pid: u32) -> Box<Fn(String) -> String> {
     use std::fs;
     use std::fs::File;
     let path = format!("/proc/{}/cgroup", pid);
     let mut cgroup_f = try!(File::open(path));
     let mut buffer = String::new();
     try!(cgroup_f.read_to_string(&mut buffer));
-    |resource| {
-        let r_cnt = 0;
-        let begin = -1;
-        let end = -1;
-        let colon_cnt = 0;
+    Box::new(|resource| {
+        let mut r_cnt = 0;
+        let mut begin = -1;
+        let mut end = -1;
+        let mut colon_cnt = 0;
         for (c, i) in buffer {
             if c == ':' {
                 colon_cnt += 1;
@@ -63,7 +63,7 @@ fn which_cgroup(pid: u32) -> (Fn(String) -> String) {
             }
         }
         return buffer[begin..end];
-    }
+    }).unwrap()
 }
 
 fn read_cgroup(resource: String, name: String, stat: String) -> String {
