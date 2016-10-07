@@ -13,7 +13,7 @@ fn parse_ns_f(content: String) -> u32 {
     let mut end;
     for (c, i) in content.chars() {
         match c {
-            '[' => begin = i,
+            '[' => begin = i + 1,
             ']' => end = i,
             _ => continue,
         }

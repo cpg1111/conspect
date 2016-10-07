@@ -37,10 +37,10 @@ fn which_cgroup(pid: u32) -> Box<Fn(String) -> String> {
     use std::fs;
     use std::fs::File;
     let path = format!("/proc/{}/cgroup", pid);
-    let mut cgroup_f = try!(File::open(path));
+    let mut cgroup_f = File::open(path).unwrap();
     let mut buffer = String::new();
-    try!(cgroup_f.read_to_string(&mut buffer));
-    Box::new(|resource| {
+    cgroup_f.read_to_string(&mut buffer);
+    Box::new(move |resource| {
         let mut r_cnt = 0;
         let mut begin = -1;
         let mut end = -1;
@@ -62,8 +62,8 @@ fn which_cgroup(pid: u32) -> Box<Fn(String) -> String> {
                 }
             }
         }
-        return buffer[begin..end];
-    }).unwrap()
+        buffer[begin..end]
+    })
 }
 
 fn read_cgroup(resource: String, name: String, stat: String) -> String {
@@ -150,7 +150,7 @@ impl Reader {
     }
     fn read(&self) -> Vec<CGroup_Stat> {
         let stats = Vec::<CGroup_Stat>::new();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
         for stat in STATS {
             self.read_res(stat, tx);
         }
