@@ -1,5 +1,6 @@
 use std::fs;
 use std::fs::File;
+use std::io::Read;
 use std::sync::mpsc;
 use std::thread;
 use regex::Regex;
@@ -30,7 +31,7 @@ const STATS: Vec<String> = vec![
 ];
 
 trait CGroup_Reader {
-    fn read(&self, stat: String) -> String;
+    fn read(&self, stat: &str) -> String;
 }
 
 fn which_cgroup(pid: u32) -> Box<Fn(String) -> String> {
@@ -45,13 +46,14 @@ fn which_cgroup(pid: u32) -> Box<Fn(String) -> String> {
         let mut begin = -1;
         let mut end = -1;
         let mut colon_cnt = 0;
-        for (c, i) in buffer {
+        for (i, c) in buffer.chars().enumerate() {
             if c == ':' {
                 colon_cnt += 1;
             } else if begin > 0 && end < 0 && c == '\n'{
                 end = i;
             } else if colon_cnt == 1 {
-                if resource[r_cnt] == c {
+                let res = resource.chars();
+                if res.nth(r_cnt).unwrap() == c {
                     r_cnt += 1;
                 } else if r_cnt > 0 && r_cnt + 1 < resource.capacity() {
                     continue;
@@ -62,16 +64,16 @@ fn which_cgroup(pid: u32) -> Box<Fn(String) -> String> {
                 }
             }
         }
-        buffer[begin..end]
+        buffer[begin..end].to_string()
     })
 }
 
-fn read_cgroup(resource: String, name: String, stat: String) -> String {
+fn read_cgroup(resource: String, name: String, stat: &str) -> String {
     let path = format!("/sys/fs/cgroup/{}/{}/{}", resource, name, stat);
-    let mut stat_f = try!(fs::File::open(path));
+    let mut stat_f = fs::File::open(path).unwrap();
     let mut buffer = String::new();
-    try!(stat_f.read_to_string(&mut buffer));
-    return buffer;
+    stat_f.read_to_string(&mut buffer);
+    buffer
 }
 
 struct CPU_Reader {
@@ -80,8 +82,8 @@ struct CPU_Reader {
 }
 
 impl CGroup_Reader for CPU_Reader {
-    fn read(&self, stat: String) -> String {
-        return read_cgroup("cpu,cpuacct", self.name, stat);
+    fn read(&self, stat: &str) -> String {
+        read_cgroup(String::from("cpu,cpuacct"), self.name, stat);
     }
 }
 
@@ -91,8 +93,8 @@ struct Mem_Reader {
 }
 
 impl CGroup_Reader for Mem_Reader {
-    fn read(&self, stat: String) -> String {
-        return read_cgroup("memory", self.name, stat);
+    fn read(&self, stat: &str) -> String {
+        return read_cgroup(String::from("memory"), self.name, stat);
     }
 }
 
@@ -102,8 +104,8 @@ struct BLKIO_Reader {
 }
 
 impl CGroup_Reader for BLKIO_Reader {
-    fn read(&self, stat: String) -> String {
-        return read_cgroup("blkio", self.name, stat);
+    fn read(&self, stat: &str) -> String {
+        return read_cgroup(String::from("blkio"), self.name, stat);
     }
 }
 
@@ -113,8 +115,8 @@ struct Net_Reader {
 }
 
 impl CGroup_Reader for Net_Reader {
-    fn read(&self, stat: String) -> String {
-        return read_cgroup("net_cls,net_prio", self.name, stat);
+    fn read(&self, stat: &str) -> String {
+        return read_cgroup(String::from("net_cls,net_prio"), self.name, stat);
     }
 }
 
@@ -128,7 +130,7 @@ pub struct Reader {
 pub type CGroup_Stat = (String, String);
 
 impl Reader {
-    fn read_res(&self, res: String, tx: mpsc::Sender<String>) {
+    fn read_res(&self, res: &str, tx: mpsc::Sender<String>) {
         let ctx = self;
         thread::spawn(|| {
             let shares;
@@ -152,7 +154,7 @@ impl Reader {
         let stats = Vec::<CGroup_Stat>::new();
         let (tx, rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
         for stat in STATS {
-            self.read_res(stat, tx);
+            self.read_res(stat.as_str(), tx);
         }
         for _ in STATS {
             stats.push(rx.recv().unwrap());
