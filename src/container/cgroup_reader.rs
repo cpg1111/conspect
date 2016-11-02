@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::File;
 use std::io::Read;
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use regex::Regex;
 
@@ -130,36 +130,38 @@ pub struct Reader {
 pub type CGroup_Stat = (String, String);
 
 impl Reader {
-    fn read_res(&self, res: &str, tx: mpsc::Sender<String>) {
-        let ctx = self;
-        thread::spawn(|| {
+    fn read_res(&self, res: &str, tx_arc: Arc<Mutex<mpsc::Sender<CGroup_Stat>>>) {
+        let tx_thread = tx_arc.clone();
+        thread::spawn(move || {
             let shares;
             let cpu_re = Regex::new(r"^cpu(.*)").unwrap();
             let mem_re = Regex::new(r"^mem(.*)").unwrap();
             let blkio_re = Regex::new(r"^mem(.*)").unwrap();
             let net_re = Regex::new(r"^net(.*)").unwrap();
             if cpu_re.is_match(res) {
-                shares = ctx.cpu.read(res);
+                shares = self.cpu.read(res);
             } else if mem_re.is_match(res) {
-                shares = ctx.mem.read(res);
+                shares = self.mem.read(res);
             } else if blkio_re.is_match(res) {
-                shares = ctx.blkio.read(res);
+                shares = self.blkio.read(res);
             } else {
-                shares = ctx.net.read(res);
+                shares = self.net.read(res);
             }
-            tx.send(shares).unwrap();
-        })
+            let tx = tx_thread.lock().unwrap();
+            tx.send((String::from(res), shares)).unwrap();
+        }).join();
     }
-    fn read(&self) -> Vec<CGroup_Stat> {
+    pub fn read(&self) -> Vec<CGroup_Stat> {
         let stats = Vec::<CGroup_Stat>::new();
-        let (tx, rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
+        let (tx, rx): (mpsc::Sender<CGroup_Stat>, mpsc::Receiver<CGroup_Stat>) = mpsc::channel();
+        let tx_arc = Arc::new(Mutex::new(tx));
         for stat in STATS {
-            self.read_res(stat.as_str(), tx);
+            self.read_res(stat.as_str(), tx_arc);
         }
         for _ in STATS {
             stats.push(rx.recv().unwrap());
         }
-        return stats;
+        stats
     }
 }
 
@@ -167,19 +169,19 @@ pub fn new(pid: u32) -> Reader {
     let name = which_cgroup(pid);
     return Reader{
         cpu: CPU_Reader{
-            name: name("cpu"),
+            name: name(String::from("cpu")),
             pid: pid,
         },
         mem: Mem_Reader{
-            name: name("memory"),
+            name: name(String::from("memory")),
             pid: pid,
         },
         blkio: BLKIO_Reader{
-            name: name("blkio"),
+            name: name(String::from("blkio")),
             pid: pid,
         },
         net: Net_Reader{
-            name: name("net_cls"),
+            name: name(String::from("net_cls")),
             pid: pid,
         },
     };
