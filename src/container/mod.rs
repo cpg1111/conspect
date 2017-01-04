@@ -24,17 +24,22 @@ impl Container {
     fn update(&self) {
         loop {
             for cgroup in self.cgroups {
-                println!("{}", cgroup.read());
+                let kvs = cgroup.read();
+                for kv in kvs {
+                    let (key, val) = kv;
+                    println!("{} : {}", key, val);
+                }
             }
         }
     }
 }
 
-pub fn new(groups: Vec<ns_reader::NS_Group>) -> Container {
-    let (namespaces, processes) = groups;
+pub fn new(group: ns_reader::NS_Group) -> Container {
+    let (namespaces, process) = group;
     return Container{
-        processes: processes,
+        processes: process,
         namespaces: namespaces,
-        cgroups: load_cgroups(processes),
+        cgroups: load_cgroups(process),
+        update_intv: 1,
     }
 }

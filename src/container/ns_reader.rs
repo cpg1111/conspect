@@ -11,7 +11,7 @@ trait NS_Reader {
 fn parse_ns_f(content: String) -> u32 {
     let mut begin;
     let mut end;
-    for (c, i) in content.chars() {
+    for (i, c) in content.chars().enumerate() {
         match c {
             '[' => begin = i + 1,
             ']' => end = i,
@@ -19,13 +19,13 @@ fn parse_ns_f(content: String) -> u32 {
         }
     }
     let ns = format!("{}", &content[begin..end]);
-    return ns.parse::<u32>();
+    ns.parse::<u32>().unwrap();
 }
 
-fn read_ns(pid: u32, ns: String) -> String {
+fn read_ns(pid: u32, ns: &str) -> u32 {
     let l_path = format!("/proc/{}/ns/{}", pid, ns);
-    let ns = try!(fs::read_link(l_path));
-    return parse_ns_f(ns);
+    let ns_f = fs::read_link(l_path).unwrap().to_str().unwrap();
+    parse_ns_f(String::from(ns_f))
 }
 
 struct User_NS_Reader {
